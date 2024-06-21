@@ -36,6 +36,7 @@ module io.helidon.webserver.websocket {
 
     requires transitive io.helidon.webserver;
     requires transitive io.helidon.websocket;
+    requires concurrency.limits.core;
 
     exports io.helidon.webserver.websocket;
 

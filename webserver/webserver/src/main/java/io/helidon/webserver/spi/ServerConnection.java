@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 package io.helidon.webserver.spi;
 
+import com.netflix.concurrency.limits.Limiter;
+
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
 
@@ -27,13 +29,13 @@ public interface ServerConnection {
      * Start handling the connection. Data is provided through
      * {@link ServerConnectionSelector#connection(io.helidon.webserver.ConnectionContext)}.
      *
-     * @param requestSemaphore semaphore that is responsible for maximal concurrent request limit, the connection implementation
-     *                         is responsible for acquiring a permit from the semaphore for the duration of a request, and
-     *                         releasing it when the request ends; please be very careful, as this may lead to complete stop
-     *                         of the server if incorrectly implemented
+     * @param requestLimiter limiter that is responsible to control concurrent requests, the connection implementation
+     *                         is responsible for acquiring a permit from the limiter for the duration of a request, and
+     *                         releasing it when the request ends by using the limiter listener; please be very careful,
+     *                         as this may lead to complete stop of the server if incorrectly implemented
      * @throws InterruptedException to interrupt any waiting state and terminate this connection
      */
-    void handle(Semaphore requestSemaphore) throws InterruptedException;
+    void handle(Limiter requestLimiter) throws InterruptedException;
 
     /**
      * How long is this connection idle. This is a duration from the last request to now.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,14 @@ package io.helidon.webserver.http2;
 
 import java.io.UncheckedIOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Semaphore;
 
+import com.netflix.concurrency.limits.Limiter;
+import com.netflix.concurrency.limits.limit.FixedLimit;
+import com.netflix.concurrency.limits.limiter.SimpleLimiter;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.common.socket.SocketWriterException;
 import io.helidon.http.DirectHandler;
@@ -100,8 +104,8 @@ class Http2ServerStream implements Runnable, Http2Stream {
     private HttpPrologue prologue;
     // create a semaphore if accessed before we get the one from connection
     // must be volatile, as it is accessed both from connection thread and from stream thread
-    private volatile Semaphore requestSemaphore = new Semaphore(1);
-    private boolean semaphoreAcquired;
+    private volatile Limiter requestLimiter = SimpleLimiter.newBuilder().limit(FixedLimit.of(1)).build();
+    private Optional<Limiter.Listener> requestLimiterListener;
 
     /**
      * A new HTTP/2 server stream.
@@ -280,9 +284,11 @@ class Http2ServerStream implements Runnable, Http2Stream {
                                  + ctx.childSocketId() + " ] - " + streamId);
         try {
             handle();
+            requestLimiterListener.ifPresent(Limiter.Listener::onSuccess);
         } catch (SocketWriterException | CloseConnectionException | UncheckedIOException e) {
             Http2RstStream rst = new Http2RstStream(Http2ErrorCode.STREAM_CLOSED);
             writer.write(rst.toFrameData(serverSettings, streamId, Http2Flag.NoFlags.create()));
+            requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
             // no sense in throwing an exception, as this is invoked from an executor service directly
         } catch (RequestException e) {
             DirectHandler handler = ctx.listenerContext()
@@ -316,12 +322,10 @@ class Http2ServerStream implements Runnable, Http2Stream {
                                     new Http2FrameData(dataHeader, BufferData.create(message)),
                                     flowControl.outbound());
             }
+            requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
         } finally {
             headers = null;
             subProtocolHandler = null;
-            if (semaphoreAcquired) {
-                requestSemaphore.release();
-            }
         }
     }
 
@@ -400,8 +404,8 @@ class Http2ServerStream implements Runnable, Http2Stream {
         }
     }
 
-    void requestSemaphore(Semaphore requestSemaphore) {
-        this.requestSemaphore = requestSemaphore;
+    void requestLimiter(Limiter requestLimiter) {
+        this.requestLimiter = requestLimiter;
     }
 
     void prologue(HttpPrologue prologue) {
@@ -491,9 +495,9 @@ class Http2ServerStream implements Runnable, Http2Stream {
                                                                    streamId,
                                                                    this::readEntityFromPipeline);
             Http2ServerResponse response = new Http2ServerResponse(this, request);
-            semaphoreAcquired = requestSemaphore.tryAcquire();
+            requestLimiterListener = requestLimiter.acquire(request);
             try {
-                if (semaphoreAcquired) {
+                if (requestLimiterListener.isPresent()) {
                     routing.route(ctx, request, response);
                 } else {
                     ctx.log(LOGGER, TRACE, "Too many concurrent requests, rejecting request.");

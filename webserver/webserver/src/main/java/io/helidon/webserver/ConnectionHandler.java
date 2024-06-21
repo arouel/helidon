@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import java.util.concurrent.Semaphore;
 
 import javax.net.ssl.SSLSocket;
 
+import com.netflix.concurrency.limits.Limiter;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.common.buffers.DataReader;
 import io.helidon.common.buffers.DataWriter;
@@ -57,7 +58,7 @@ class ConnectionHandler implements InterruptableTask<Void>, ConnectionContext {
     private final ListenerContext listenerContext;
     // we must safely release the semaphore whenever this connection is finished, so other connections can be created!
     private final Semaphore connectionSemaphore;
-    private final Semaphore requestSemaphore;
+    private final Limiter requestLimiter;
     private final ConnectionProviders connectionProviders;
     private final List<ServerConnectionSelector> providerCandidates;
     private final Map<String, ServerConnection> activeConnections;
@@ -75,7 +76,7 @@ class ConnectionHandler implements InterruptableTask<Void>, ConnectionContext {
 
     ConnectionHandler(ListenerContext listenerContext,
                       Semaphore connectionSemaphore,
-                      Semaphore requestSemaphore,
+                      Limiter requestLimiter,
                       ConnectionProviders connectionProviders,
                       Map<String, ServerConnection> activeConnections,
                       Socket socket,
@@ -84,7 +85,7 @@ class ConnectionHandler implements InterruptableTask<Void>, ConnectionContext {
                       Tls tls) {
         this.listenerContext = listenerContext;
         this.connectionSemaphore = connectionSemaphore;
-        this.requestSemaphore = requestSemaphore;
+        this.requestLimiter = requestLimiter;
         this.connectionProviders = connectionProviders;
         this.providerCandidates = connectionProviders.providerCandidates();
         this.activeConnections = activeConnections;
@@ -162,7 +163,7 @@ class ConnectionHandler implements InterruptableTask<Void>, ConnectionContext {
                 throw new CloseConnectionException("No suitable connection provider");
             }
             activeConnections.put(socketsId, connection);
-            connection.handle(requestSemaphore);
+            connection.handle(requestLimiter);
         } catch (RequestException e) {
             helidonSocket.log(LOGGER, WARNING, "escaped Request exception", e);
         } catch (HttpException e) {

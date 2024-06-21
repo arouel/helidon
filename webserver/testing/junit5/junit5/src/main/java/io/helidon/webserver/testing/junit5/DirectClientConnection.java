@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,9 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.netflix.concurrency.limits.Limiter;
+import com.netflix.concurrency.limits.limit.FixedLimit;
+import com.netflix.concurrency.limits.limiter.SimpleLimiter;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.common.buffers.DataReader;
 import io.helidon.common.buffers.DataWriter;
@@ -153,7 +156,8 @@ class DirectClientConnection implements ClientConnection {
         serverContext.executor()
                 .submit(() -> {
                     try {
-                        connection.handle(new Semaphore(1024));
+                        Limiter limiter = SimpleLimiter.newBuilder().limit(FixedLimit.of(1024)).build();
+                        connection.handle(limiter);
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.Optional;
-import java.util.concurrent.Semaphore;
 
+import com.netflix.concurrency.limits.Limiter;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.common.buffers.DataReader;
 import io.helidon.http.DateTime;
@@ -66,11 +66,12 @@ class TyrusConnection implements ServerConnection, WsSession {
     }
 
     @Override
-    public void handle(Semaphore requestSemaphore) {
+    public void handle(Limiter requestLimiter) {
         myThread = Thread.currentThread();
         DataReader dataReader = ctx.dataReader();
         listener.onOpen(this);
-        if (requestSemaphore.tryAcquire()) {
+        Optional<Limiter.Listener> requestLimiterListener = requestLimiter.acquire(this);
+        if (requestLimiterListener.isPresent()) {
             try {
                 while (canRun) {
                     try {
@@ -80,15 +81,18 @@ class TyrusConnection implements ServerConnection, WsSession {
                         lastRequestTimestamp = DateTime.timestamp();
                         listener.onMessage(this, buffer, true);
                         lastRequestTimestamp = DateTime.timestamp();
+                        requestLimiterListener.ifPresent(Limiter.Listener::onSuccess);
                     } catch (Exception e) {
                         listener.onError(this, e);
+                        requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
                         listener.onClose(this, WsCloseCodes.UNEXPECTED_CONDITION, e.getMessage());
                         return;
                     }
                 }
                 listener.onClose(this, WsCloseCodes.NORMAL_CLOSE, "Idle timeout");
-            } finally {
-                requestSemaphore.release();
+            } catch (Exception e) {
+                requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
+                throw e;
             }
         } else {
             listener.onClose(this, WsCloseCodes.TRY_AGAIN_LATER, "Too Many Concurrent Requests");

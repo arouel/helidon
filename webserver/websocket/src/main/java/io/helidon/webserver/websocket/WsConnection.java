@@ -21,8 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.Optional;
-import java.util.concurrent.Semaphore;
 
+import com.netflix.concurrency.limits.Limiter;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.common.buffers.DataReader;
 import io.helidon.http.DateTime;
@@ -124,11 +124,12 @@ public class WsConnection implements ServerConnection, WsSession {
     }
 
     @Override
-    public void handle(Semaphore requestSemaphore) {
+    public void handle(Limiter requestLimiter) {
         myThread = Thread.currentThread();
         listener.onOpen(this);
 
-        if (requestSemaphore.tryAcquire()) {
+        Optional<Limiter.Listener> requestLimiterListener = requestLimiter.acquire(this);
+        if (requestLimiterListener.isPresent()) {
             try {
                 while (canRun) {
                     readingNetwork = true;
@@ -138,6 +139,7 @@ public class WsConnection implements ServerConnection, WsSession {
                     try {
                         if (!processFrame(frame)) {
                             lastRequestTimestamp = DateTime.timestamp();
+                            requestLimiterListener.ifPresent(Limiter.Listener::onSuccess);
                             return;
                         }
                         lastRequestTimestamp = DateTime.timestamp();
@@ -145,13 +147,16 @@ public class WsConnection implements ServerConnection, WsSession {
                         throw e;
                     } catch (Exception e) {
                         listener.onError(this, e);
+                        requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
                         this.close(WsCloseCodes.UNEXPECTED_CONDITION, e.getMessage());
                         return;
                     }
                 }
                 this.close(WsCloseCodes.NORMAL_CLOSE, "Idle timeout");
-            } finally {
-                requestSemaphore.release();
+                requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
+            } catch (Exception e) {
+                requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
+                throw e;
             }
         } else {
             listener.onClose(this, WsCloseCodes.TRY_AGAIN_LATER, "Too Many Concurrent Requests");
