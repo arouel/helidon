@@ -23,8 +23,8 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
 
+import com.netflix.concurrency.limits.Limiter;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.common.buffers.DataReader;
 import io.helidon.common.task.InterruptableTask;
@@ -172,9 +172,9 @@ public class Http2Connection implements ServerConnection, InterruptableTask<Void
     }
 
     @Override
-    public void handle(Semaphore requestSemaphore) throws InterruptedException {
+    public void handle(Limiter requestLimiter) throws InterruptedException {
         try {
-            doHandle(requestSemaphore);
+            doHandle(requestLimiter);
         } catch (Http2Exception e) {
             if (state == State.FINISHED) {
                 // already handled
@@ -326,7 +326,7 @@ public class Http2Connection implements ServerConnection, InterruptableTask<Void
         return clientSettings;
     }
 
-    private void doHandle(Semaphore requestSemaphore) throws InterruptedException {
+    private void doHandle(Limiter requestLimiter) throws InterruptedException {
         myThread = Thread.currentThread();
         while (canRun && state != State.FINISHED) {
             if (expectPreface && state != State.WRITE_SERVER_SETTINGS) {
@@ -341,9 +341,9 @@ public class Http2Connection implements ServerConnection, InterruptableTask<Void
                     // no data to read -> connection is closed
                     throw new CloseConnectionException("Connection closed by client", e);
                 }
-                dispatchHandler(requestSemaphore);
+                dispatchHandler(requestLimiter);
             } else {
-                dispatchHandler(requestSemaphore);
+                dispatchHandler(requestLimiter);
             }
         }
         if (state != State.FINISHED) {
@@ -352,7 +352,7 @@ public class Http2Connection implements ServerConnection, InterruptableTask<Void
         }
     }
 
-    private void dispatchHandler(Semaphore requestSemaphore) {
+    private void dispatchHandler(Limiter requestLimiter) {
         switch (state) {
         case CONTINUATION -> doContinuation();
         case WRITE_SERVER_SETTINGS -> writeServerSettings();
@@ -360,7 +360,7 @@ public class Http2Connection implements ServerConnection, InterruptableTask<Void
         case SETTINGS -> doSettings();
         case ACK_SETTINGS -> ackSettings();
         case DATA -> dataFrame();
-        case HEADERS -> doHeaders(requestSemaphore);
+        case HEADERS -> doHeaders(requestLimiter);
         case PRIORITY -> doPriority();
         case READ_PUSH_PROMISE -> throw new Http2Exception(Http2ErrorCode.REFUSED_STREAM, "Push promise not supported");
         case PING -> pingFrame();
@@ -606,7 +606,7 @@ public class Http2Connection implements ServerConnection, InterruptableTask<Void
         state = State.READ_FRAME;
     }
 
-    private void doHeaders(Semaphore requestSemaphore) {
+    private void doHeaders(Limiter requestLimiter) {
         int streamId = frameHeader.streamId();
         StreamContext streamContext = stream(streamId);
 
@@ -675,7 +675,7 @@ public class Http2Connection implements ServerConnection, InterruptableTask<Void
                                                         path,
                                                         http2Config.validatePath());
         stream.prologue(httpPrologue);
-        stream.requestSemaphore(requestSemaphore);
+        stream.requestLimiter(requestLimiter);
         stream.headers(headers, endOfStream);
         state = State.READ_FRAME;
 

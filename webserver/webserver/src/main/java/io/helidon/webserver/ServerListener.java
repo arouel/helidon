@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2022, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,6 +42,9 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLServerSocket;
 
+import com.netflix.concurrency.limits.Limiter;
+import com.netflix.concurrency.limits.limit.FixedLimit;
+import com.netflix.concurrency.limits.limiter.SimpleLimiter;
 import io.helidon.common.HelidonServiceLoader;
 import io.helidon.common.LazyValue;
 import io.helidon.common.context.Context;
@@ -86,7 +89,7 @@ class ServerListener implements ListenerContext {
     private final ContentEncodingContext contentEncodingContext;
     private final Context context;
     private final Semaphore connectionSemaphore;
-    private final Semaphore requestSemaphore;
+    private final Limiter requestLimiter;
     private final Map<String, ServerConnection> activeConnections = new ConcurrentHashMap<>();
 
     private volatile boolean running;
@@ -119,9 +122,9 @@ class ServerListener implements ListenerContext {
         this.connectionSemaphore = listenerConfig.maxTcpConnections() == -1
                 ? new NoopSemaphore()
                 : new Semaphore(listenerConfig.maxTcpConnections());
-        this.requestSemaphore = listenerConfig.maxConcurrentRequests() == -1
-                ? new NoopSemaphore()
-                : new Semaphore(listenerConfig.maxConcurrentRequests());
+        this.requestLimiter = listenerConfig.maxConcurrentRequests() == -1
+                ? SimpleLimiter.newBuilder().build()
+                : SimpleLimiter.newBuilder().limit(FixedLimit.of(listenerConfig.maxConcurrentRequests())).build();
         this.connectionProviders = ConnectionProviders.create(selectors);
         this.socketName = socketName;
         this.listenerConfig = listenerConfig;
@@ -340,7 +343,7 @@ class ServerListener implements ListenerContext {
                     connectionOptions.configureSocket(socket);
                     ConnectionHandler handler = new ConnectionHandler(this,
                                                     connectionSemaphore,
-                                                    requestSemaphore,
+                                                    requestLimiter,
                                                     connectionProviders,
                                                     activeConnections,
                                                     socket,

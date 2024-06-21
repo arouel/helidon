@@ -21,10 +21,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Semaphore;
 import java.util.function.Supplier;
 
+import com.netflix.concurrency.limits.Limiter;
 import io.helidon.common.ParserHelper;
 import io.helidon.common.buffers.BufferData;
 import io.helidon.common.buffers.DataReader;
@@ -135,7 +136,7 @@ public class Http1Connection implements ServerConnection, InterruptableTask<Void
     }
 
     @Override
-    public void handle(Semaphore requestSemaphore) throws InterruptedException {
+    public void handle(Limiter requestLimiter) throws InterruptedException {
         this.myThread = Thread.currentThread();
         try {
             // look for protocol data
@@ -182,19 +183,22 @@ public class Http1Connection implements ServerConnection, InterruptableTask<Void
                                 }
                                 this.upgradeConnection = upgradeConnection;
                                 // this will block until the connection terminates
-                                upgradeConnection.handle(requestSemaphore);
+                                upgradeConnection.handle(requestLimiter);
                                 return;
                             }
                         }
                     }
                 }
-                if (requestSemaphore.tryAcquire()) {
+                Optional<Limiter.Listener> requestLimiterListener = requestLimiter.acquire(this);
+                if (requestLimiterListener.isPresent()) {
                     try {
                         this.lastRequestTimestamp = DateTime.timestamp();
                         route(prologue, headers);
                         this.lastRequestTimestamp = DateTime.timestamp();
-                    } finally {
-                        requestSemaphore.release();
+                        requestLimiterListener.ifPresent(Limiter.Listener::onSuccess);
+                    } catch (Exception e) {
+                        requestLimiterListener.ifPresent(Limiter.Listener::onIgnore);
+                        throw e;
                     }
                 } else {
                     ctx.log(LOGGER, TRACE, "Too many concurrent requests, rejecting request and closing connection.");
