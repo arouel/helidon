@@ -43,7 +43,7 @@ class ScopedRegistryImpl implements ScopedRegistry {
 
     private final TypeName scope;
     private final String id;
-    private boolean active = false;
+    private volatile boolean active = false;
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     ScopedRegistryImpl(CoreServiceRegistry registry,
@@ -82,6 +82,7 @@ class ScopedRegistryImpl implements ScopedRegistry {
             if (!active) {
                 return;
             }
+            active = false;
 
             List<Activator<?>> toShutdown = activators.values()
                     .stream()
@@ -114,8 +115,6 @@ class ScopedRegistryImpl implements ScopedRegistry {
                     exceptions.add(new ServiceRegistryException("Failed to deactivate " + managedService.description(), e));
                 }
             }
-
-            active = false;
 
             if (exceptions.isEmpty()) {
                 return;
