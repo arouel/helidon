@@ -1607,4 +1607,11 @@
             </build>
         </profile>
     </profiles>
+    <distributionManagement>
+        <repository>
+            <id>maven-ext-local-release</id>
+            <name>Maven Virtual Release Repository</name>
+            <url>https://tealium.jfrog.io/artifactory/maven-ext-local-release</url>
+        </repository>
+    </distributionManagement>
 </project>
