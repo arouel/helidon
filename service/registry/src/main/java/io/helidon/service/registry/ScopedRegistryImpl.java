@@ -132,7 +132,7 @@ class ScopedRegistryImpl implements ScopedRegistry {
     public <T> Activator<T> activator(ServiceInfo descriptor, Supplier<Activator<T>> activatorSupplier) {
         try {
             serviceProvidersLock.readLock().lock();
-            checkActive();
+            checkActive(descriptor);
             Activator<?> activator = activators.get(descriptor);
             if (activator != null) {
                 return (Activator<T>) activator;
@@ -144,7 +144,7 @@ class ScopedRegistryImpl implements ScopedRegistry {
         // failed to get instance, now let's obtain a write lock and do it again
         try {
             serviceProvidersLock.writeLock().lock();
-            checkActive();
+            checkActive(descriptor);
             return (Activator<T>) activators.computeIfAbsent(descriptor,
                                                              desc -> activatorSupplier.get());
         } finally {
@@ -158,9 +158,9 @@ class ScopedRegistryImpl implements ScopedRegistry {
                 .thenComparing(it -> it.descriptor().weight());
     }
 
-    private void checkActive() {
+    private void checkActive(ServiceInfo descriptor) {
         if (!active) {
-            throw new ScopeNotActiveException("Injection scope " + scope.fqName() + "[" + id + "] is not active.", scope);
+            throw new ScopeNotActiveException("Injection scope " + scope.fqName() + "[" + id + "] is not active. Descriptor service type: " + descriptor.serviceType(), scope);
         }
     }
 }
