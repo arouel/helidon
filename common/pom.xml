@@ -23,7 +23,7 @@
     <parent>
         <groupId>io.helidon</groupId>
         <artifactId>helidon-project</artifactId>
-        <version>${helidon.version}</version>
+        <version>4.2.3.3-SNAPSHOT</version>
     </parent>
     <groupId>io.helidon.common</groupId>
     <artifactId>helidon-common-project</artifactId>

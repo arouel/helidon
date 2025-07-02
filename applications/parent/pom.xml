@@ -23,7 +23,7 @@
     <parent>
         <groupId>io.helidon.applications</groupId>
         <artifactId>helidon-applications-project</artifactId>
-        <version>${helidon.version}</version>
+        <version>4.2.3.3-SNAPSHOT</version>
     </parent>
     <groupId>io.helidon.applications</groupId>
     <artifactId>helidon-applications</artifactId>
@@ -308,4 +308,10 @@
     <developers>
         <developer/>
     </developers>
+    <distributionManagement>
+        <!--suppress MavenModelInspection -->
+        <repository />
+        <!--suppress MavenModelInspection -->
+        <snapshotRepository />
+    </distributionManagement>
 </project>
