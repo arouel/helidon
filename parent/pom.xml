@@ -22,7 +22,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.helidon</groupId>
     <artifactId>helidon-parent</artifactId>
-    <version>4.2.3-tealium-SNAPSHOT</version>
+    <version>4.2.3.1-tealium-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Helidon Parent</name>
@@ -203,6 +203,7 @@
         <snapshotRepository>
             <id>maven-ext-local-snapshot</id>
             <name>Maven Virtual Snapshot Repository</name>
+            <!--url>file:///Users/mike.schulze@tealium.com/maven_local</url-->
             <url>https://tealium.jfrog.io/artifactory/maven-ext-local-snapshot</url>
         </snapshotRepository>
     </distributionManagement>
