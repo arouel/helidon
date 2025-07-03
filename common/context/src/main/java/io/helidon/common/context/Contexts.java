@@ -49,6 +49,14 @@ public final class Contexts {
     }
 
     /**
+     * Cleans all registered services from the global context
+     */
+    public static void cleanup() {
+        clear();
+        GLOBAL_CONTEXT.get().clear();
+    }
+
+    /**
      * Get context registry associated with current thread.
      *
      * @return context that is associated with current thread or empty if none is

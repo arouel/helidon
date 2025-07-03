@@ -163,6 +163,11 @@ public interface Context {
     String id();
 
     /**
+     * Clear members to reset into initial state
+     */
+    void clear();
+
+    /**
      * Fluent API builder for {@link Context}.
      */
     class Builder implements io.helidon.common.Builder<Builder, Context> {
