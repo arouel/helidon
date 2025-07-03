@@ -61,6 +61,11 @@ class ListContext implements Context {
     }
 
     @Override
+    public void clear() {
+        classifiers.clear();
+    }
+
+    @Override
     public <T> Optional<T> get(Class<T> type) {
         T result = registry.get(type);
         if (result == null) {
@@ -151,6 +156,15 @@ class ListContext implements Context {
             Objects.requireNonNull(type, "Parameter 'type' is null!");
             Objects.requireNonNull(supplier, "Parameter 'supplier' is null!");
             registerItem(new RegisteredSupplier<>(type, supplier));
+        }
+
+        <T> void clear() {
+            Lock l = lock.writeLock();
+            try {
+                content.clear();
+            } finally {
+                l.unlock();
+            }
         }
 
         <T> T get(Class<T> type) {
